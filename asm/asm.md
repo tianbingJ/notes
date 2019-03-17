@@ -1,14 +1,35 @@
 
-## ClassReader
+<!-- TOC -->
+
+- [0.1. Classes](#01-classes)
+    - [0.1.1. 常用类](#011-常用类)
+        - [0.1.1.1. ClassReader](#0111-classreader)
+        - [0.1.1.2. ClassVisitor](#0112-classvisitor)
+        - [0.1.1.3. ClassWriter](#0113-classwriter)
+        - [0.1.1.4. 使用ClassWriter定义的类](#0114-使用classwriter定义的类)
+    - [0.1.2. 转换类](#012-转换类)
+    - [0.1.3. 删除类成员](#013-删除类成员)
+    - [0.1.4. 添加成员](#014-添加成员)
+    - [0.1.5. 工具](#015-工具)
+        - [0.1.5.1. Type](#0151-type)
+        - [0.1.5.2. TraceClassVisitor](#0152-traceclassvisitor)
+        - [0.1.5.3. CheckClassAdapter](#0153-checkclassadapter)
+        - [0.1.5.4. ASMifier](#0154-asmifier)
+- [Methods](#methods)
+
+<!-- /TOC -->
+## 0.1. Classes
+### 0.1.1. 常用类
+#### 0.1.1.1. ClassReader
 解析一个编译后的类（字节码形式的byte array），调用ClassVisitor对象对应的visitXXX方法，ClassVisitor对象通过ClassReader.accept方法的参数传入.Class可以看做是时间的生产者。
 
-## ClassVisitor
+#### 0.1.1.2. ClassVisitor
 代理所有的方法调用给其他的ClassVisitor对象，可以看做是一个Event Filter。
 
-## ClassWriter
+#### 0.1.1.3. ClassWriter
 ClassWriter继承了ClassVisitor，它生成类的字节码，可以看做是事件的消费者。
 
-## 使用ClassWriter定义的类
+#### 0.1.1.4. 使用ClassWriter定义的类
 如果产生使用类由使用的环境所决定，如果你正在实现一个编译器，类生成则由AST驱动，生成的类则会保存在硬盘上。如果是使用动态代理，则类的生成可以使用ClassLoader实现。
 - 可以把类定义保存在.class文件，方便以后使用。
 - 定义一个ClassLoader,使用defineClass方法
@@ -40,7 +61,7 @@ cName是类internal name， b是byte array.
     }
 ```
 
-## 转换类
+### 0.1.2. 转换类
 组合ClassReader, ClassVisitor, ClassWriter. ClassReader读取一个类的定义，ClassVisitor对类的定义进行修改，ClassWriter生成转换后的类定义。
 ![transform](../resources/image/asm/class_transform.png)
 ```
@@ -53,7 +74,7 @@ cr.accept(cv, 0);
 byte[] b2 = cw.toByteArray(); // b2 represents the same class as b1
 ```
 
-## 删除类成员
+### 0.1.3. 删除类成员
 对于返回值是空的成员访问，只要不forword method call，即可删除内容。
 如下删除内部类、外部类和源文件信息。
 ```
@@ -97,7 +118,7 @@ byte[] b2 = cw.toByteArray(); // b2 represents the same class as b1
         }
 }
 ```
-## 添加成员
+### 0.1.4. 添加成员
 添加Field可以通过调用visitField方法实现，但是visitField的方法调用必须放在合适的位置。比如不同在调用visit()方法的时候调用visitField，因为这样可能导致调用visitField之后调用visitSource、visitAnnotation等方法，这种访问顺序是不合法的。如果添加在visitField或者visitMethod方法中，会导致有几个字段或者有几个方法，就添加了几个字段。更常用的方式是添加在visitEnd方法中，如下：
 ```
 
@@ -133,3 +154,113 @@ byte[] b2 = cw.toByteArray(); // b2 represents the same class as b1
         }
 }
 ```
+### 0.1.5. 工具
+ASM出于性能考虑，没有把internal name和type descriptors转换成java 源文件中的表达方式，可以通过Type手动的进行转换。
+#### 0.1.5.1. Type
+Type代表一个Java Type,可以通过类和类型描述符构造。
+```
+    String name = Type.getType("Ljava/lang/String;");
+    String stringInternalName = Type.getType(String.class);     
+
+    Type.getInternalName()只对Class或者interface有效。
+    原子类型的Type可以通过Type.INT_TYPE等获得。
+
+    Type.getDescriptor()返回类型描述符:
+    Type.getType("Ljava/lang/String;").getDescriptor(); // Ljava/lang/String;
+```
+
+Type也可以表示一个方法类型，可以通过Method对象构造，此时getDescriptor返回方法描述法
+```
+        Method method = String.class.getMethod("substring", int.class);
+        System.out.println(Type.getType(method).getDescriptor());
+        Type[] types = Type.getType(method).getArgumentTypes();
+        Type returnType = Type.getType(method).getReturnType();
+```
+Type也可以直接解析类型描述符，返回对应的Type
+```
+        Type[] arguTypes = Type.getArgumentTypes("(I)V"); // [Type.INT_TYPE]
+        Type retType = Type.getReturnType("(I)V");  //Type.VOID_TYPE
+        
+```
+
+#### 0.1.5.2. TraceClassVisitor
+以可读的方式输出生成的类：
+```
+    ClassWriter classWriter = new ClassWriter(0);
+    PrintWriter printWriter = new PrintWriter(System.out);
+    TraceClassVisitor traceClassVisitor = new TraceClassVisitor(classWriter, printWriter);
+    ClassReader classReader = new ClassReader("java/lang/Runnable");
+    classReader.accept(traceClassVisitor, 0);
+```
+产生如下输出
+```
+// class version 52.0 (52)
+// access flags 0x601
+public abstract interface java/lang/Runnable {
+
+  // compiled from: Runnable.java
+
+  @Ljava/lang/FunctionalInterface;()
+
+  // access flags 0x401
+  public abstract run()V
+}
+```
+
+#### 0.1.5.3. CheckClassAdapter
+ClassWriter并不检查生成的字节码，它可以生成JVM拒绝的字节码；CheckClassAdapter可以检查生成后的字节码是否正确。
+```
+ClassWriter cw = new ClassWriter(0);
+TraceClassVisitor tcv = new TraceClassVisitor(cw, printWriter); 
+CheckClassAdapter cv = new CheckClassAdapter(tcv); 
+cv.visit(...);
+...
+cv.visitEnd();
+byte b[] = cw.toByteArray();
+```
+
+#### 0.1.5.4. ASMifier
+ASM可以根据java字节码反推出用ASM生成一样代码的ASM代码。修改上述示例，加入ASMifier给TraceClassVisitor对象：
+```
+        ClassWriter classWriter = new ClassWriter(0);
+        PrintWriter printWriter = new PrintWriter(System.out);
+        ASMifier asMifier = new ASMifier();
+        TraceClassVisitor traceClassVisitor = new TraceClassVisitor(classWriter, asMifier, printWriter);
+        ClassReader classReader = new ClassReader("java/lang/Runnable");
+        classReader.accept(traceClassVisitor, 0);
+```
+输出结果为：
+```
+package asm.java.lang;
+import java.util.*;
+import jdk.internal.org.objectweb.asm.*;
+public class RunnableDump implements Opcodes {
+
+public static byte[] dump () throws Exception {
+
+ClassWriter cw = new ClassWriter(0);
+FieldVisitor fv;
+MethodVisitor mv;
+AnnotationVisitor av0;
+
+cw.visit(52, ACC_PUBLIC + ACC_ABSTRACT + ACC_INTERFACE, "java/lang/Runnable", null, "java/lang/Object", null);
+
+cw.visitSource("Runnable.java", null);
+
+{
+av0 = cw.visitAnnotation("Ljava/lang/FunctionalInterface;", true);
+av0.visitEnd();
+}
+{
+mv = cw.visitMethod(ACC_PUBLIC + ACC_ABSTRACT, "run", "()V", null, null);
+mv.visitEnd();
+}
+cw.visitEnd();
+
+return cw.toByteArray();
+}
+}
+```
+IntelliJ有对应的插件，不用手动调用。
+
+## Methods
