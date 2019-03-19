@@ -6,6 +6,7 @@
         - [0.1.1.1. ClassReader](#0111-classreader)
         - [0.1.1.2. ClassVisitor](#0112-classvisitor)
         - [0.1.1.3. ClassWriter](#0113-classwriter)
+        - [ClassVisitor必须按照指定的顺便进行访问](#classvisitor必须按照指定的顺便进行访问)
         - [0.1.1.4. 使用ClassWriter定义的类](#0114-使用classwriter定义的类)
     - [0.1.2. 转换类](#012-转换类)
     - [0.1.3. 删除类成员](#013-删除类成员)
@@ -15,7 +16,8 @@
         - [0.1.5.2. TraceClassVisitor](#0152-traceclassvisitor)
         - [0.1.5.3. CheckClassAdapter](#0153-checkclassadapter)
         - [0.1.5.4. ASMifier](#0154-asmifier)
-- [Methods](#methods)
+- [0.2. Methods](#02-methods)
+        - [0.2.0.5. ClassWriter Options](#0205-classwriter-options)
 
 <!-- /TOC -->
 ## 0.1. Classes
@@ -28,6 +30,34 @@
 
 #### 0.1.1.3. ClassWriter
 ClassWriter继承了ClassVisitor，它生成类的字节码，可以看做是事件的消费者。
+
+#### ClassVisitor必须按照指定的顺便进行访问
+```
+    public abstract class ClassVisitor {
+        public ClassVisitor(int api);
+
+        public ClassVisitor(int api, ClassVisitor cv);
+        public void visit(int version, int access, String name,   String signature, String superName, String[] interfaces);
+        public void visitSource(String source, String debug);
+
+        public void visitOuterClass(String owner, String name, String desc);
+
+        AnnotationVisitor visitAnnotation(String desc, boolean visible);
+
+        public void visitAttribute(Attribute attr);
+
+        public void visitInnerClass(String name, String outerName,
+                                    String innerName, int access);
+
+        public FieldVisitor visitField(int access, String name, String desc,
+                                       String signature, Object value);
+
+        public MethodVisitor visitMethod(int access, String name, String desc,
+                                         String signature, String[] exceptions);
+
+        void visitEnd();
+    }
+```
 
 #### 0.1.1.4. 使用ClassWriter定义的类
 如果产生使用类由使用的环境所决定，如果你正在实现一个编译器，类生成则由AST驱动，生成的类则会保存在硬盘上。如果是使用动态代理，则类的生成可以使用ClassLoader实现。
@@ -263,7 +293,7 @@ return cw.toByteArray();
 ```
 IntelliJ有对应的插件，不用手动调用。
 
-## Methods
+## 0.2. Methods
 ASM API通过MethodVisitor产生和转换编译后的方法。方法的调用顺便必须按照如下顺序进行：
 ```
 visitAnnotationDefault?
@@ -325,3 +355,36 @@ ASM提供三个构建在MethodVisitors上面的核心组件：
 ClassReader | ClassReader解析字节码，调用其accept的ClassVisitor对象中的返回MethodVisitor的方法。
 ClassWriter|ClassWriter的visitMethod方法直接返回一个MethodVisitor的实现，它直接以二进制的方式构建编译后的方法实现。
 MethodVisitor | MethodVisitor代理所有它接收的调用给另外一个MethodVisitor对象。
+
+#### 0.2.0.5. ClassWriter Options
+自己计算local variables size和operand stack size，然后通过参数visitMaxs()确定的话比较困难（包括frames）。ASM可以自动计算，当创建ClassWriter对象的时候，可以通过制定参数来实现：
+```
+ClassWriter cw = new ClassWriter(option)
+```
+option可以是以下几个选项：
+option取值 | 含义
+-|- 
+0 | 不自行自动计算，需要自己计算frames、local variables和operand stack size
+ClassWriter.COMPUTE_MAXS | 自动计算local variables和operand stack。此时依然需要调用visitMaxs，但是可以传任意参数，这些参数将会被忽略；需要自己计算frames。
+ClassWriter.COMPUTE_FRAMES | 自动计算上述几个选项，不用调用visitFrame，但是需要调用visitMaxs，参数将会被忽略。
+
+```
+public class Bean {
+    private int f;
+    public int getF() {
+        return this.f;
+    }
+    public void setF(int f) {
+        this.f = f;
+    }
+}
+```
+getF方法的实现可以用如下代码生成，假设mv是一个MethodVisitor:
+```
+   mv.visitCode();
+      mv.visitVarInsn(ALOAD, 0);
+      mv.visitFieldInsn(GETFIELD, "pkg/Bean", "f", "I");
+      mv.visitInsn(IRETURN);
+      mv.visitMaxs(1, 1);
+      mv.visitEnd();
+```
