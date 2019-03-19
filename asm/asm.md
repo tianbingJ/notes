@@ -264,3 +264,64 @@ return cw.toByteArray();
 IntelliJ有对应的插件，不用手动调用。
 
 ## Methods
+ASM API通过MethodVisitor产生和转换编译后的方法。方法的调用顺便必须按照如下顺序进行：
+```
+visitAnnotationDefault?
+( visitAnnotation | visitParameterAnnotation | visitAttribute )* ( visitCode
+( visitTryCatchBlock | visitLabel | visitFrame | visitXxxInsn | visitLocalVariable | visitLineNumber )*
+visitMaxs )? visitEnd
+```
+
+MethodVisitor类：
+```
+abstract class MethodVisitor { // public accessors ommited MethodVisitor(int api);
+MethodVisitor(int api, MethodVisitor mv);
+AnnotationVisitor visitAnnotationDefault();
+AnnotationVisitor visitAnnotation(String desc, boolean visible); AnnotationVisitor visitParameterAnnotation(int parameter,
+String desc, boolean visible);
+void visitAttribute(Attribute attr);
+void visitCode();
+void visitFrame(int type, int nLocal, Object[] local, int nStack,
+Object[] stack);
+void visitInsn(int opcode);
+void visitIntInsn(int opcode, int operand);
+void visitVarInsn(int opcode, int var);
+void visitTypeInsn(int opcode, String desc);
+void visitFieldInsn(int opc, String owner, String name, String desc); void visitMethodInsn(int opc, String owner, String name, String desc); void visitInvokeDynamicInsn(String name, String desc, Handle bsm,
+Object... bsmArgs);
+void visitJumpInsn(int opcode, Label label);
+void visitLabel(Label label);
+void visitLdcInsn(Object cst);
+void visitIincInsn(int var, int increment);
+void visitTableSwitchInsn(int min, int max, Label dflt, Label[] labels); void visitLookupSwitchInsn(Label dflt, int[] keys, Label[] labels);
+void visitMultiANewArrayInsn(String desc, int dims);
+void visitTryCatchBlock(Label start, Label end, Label handler,
+            String type);
+        void visitLocalVariable(String name, String desc, String signature,
+Label start, Label end, int index);
+void visitLineNumber(int line, Label start); void visitMaxs(int maxStack, int maxLocals); void visitEnd();
+}
+```
+
+ClassVisitor可以和Method一起使用生成代码：
+```
+
+      ClassVisitor cv = ...;
+      cv.visit(...);
+      MethodVisitor mv1 = cv.visitMethod(..., "m1", ...);
+      mv1.visitCode();
+      mv1.visitInsn(...);
+      ...
+      mv1.visitMaxs(...);
+      mv1.visitEnd();
+      MethodVisitor mv2 = cv.visitMethod(..., "m2", ...);
+      .....
+      cv.visitEnd();
+```
+
+ASM提供三个构建在MethodVisitors上面的核心组件：
+组件|说明
+--|--
+ClassReader | ClassReader解析字节码，调用其accept的ClassVisitor对象中的返回MethodVisitor的方法。
+ClassWriter|ClassWriter的visitMethod方法直接返回一个MethodVisitor的实现，它直接以二进制的方式构建编译后的方法实现。
+MethodVisitor | MethodVisitor代理所有它接收的调用给另外一个MethodVisitor对象。
