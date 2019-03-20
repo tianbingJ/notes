@@ -17,7 +17,9 @@
         - [0.1.5.3. CheckClassAdapter](#0153-checkclassadapter)
         - [0.1.5.4. ASMifier](#0154-asmifier)
 - [0.2. Methods](#02-methods)
+    - [生成类](#生成类)
         - [0.2.0.5. ClassWriter Options](#0205-classwriter-options)
+    - [修改方法](#修改方法)
 
 <!-- /TOC -->
 ## 0.1. Classes
@@ -344,7 +346,7 @@ MethodVisitor类：
         void visitEnd();
     }
 ```
-
+### 生成类
 ClassVisitor可以和Method一起使用生成代码：
 ```
 
@@ -400,4 +402,38 @@ getF方法的实现可以用如下代码生成，假设mv是一个MethodVisitor:
       mv.visitInsn(IRETURN);
       mv.visitMaxs(1, 1);
       mv.visitEnd();
+```
+
+### 修改方法
+MethodVisitor是一个抽象类，默认什么都不做, 只是forward所有的调用。修改某个类方法的实现可以同过修改MethodVisitor方法来操作，以下是一个删除类中NOP指定的代码:
+```
+public class RemoveNopAdapter extends MethodVisitor {
+
+    public RemoveNopAdapter(MethodVisitor mv) {
+        super(ASM4, mv);
+    }
+
+    @Override
+    public void visitInsn(int opcode) {
+        if (opcode != NOP) {
+            mv.visitInsn(opcode);
+        }
+    }
+}
+```
+ClassVisitor的visitMethod返回的MethodVisitor的实现类是MethodWriter，他会修改类的实现。可以修改ClassVisitor类visitMethod方法，让它返回自定义的实现。
+使用上述类：
+```
+ public class RemoveNopClassAdapter extends ClassVisitor {
+        public RemoveNopClassAdapter(ClassVisitor cv) {
+          super(ASM4, cv);
+        }
+        @Override
+        public MethodVisitor visitMethod(int access, String name,
+String desc, String signature, String[] exceptions) { MethodVisitor mv;
+mv = cv.visitMethod(access, name, desc, signature, exceptions); if (mv != null) {
+            mv = new RemoveNopAdapter(mv);
+          }
+return mv; }
+}
 ```
