@@ -374,11 +374,12 @@ MethodVisitor | MethodVisitor代理所有它接收的调用给另外一个Method
 ClassWriter cw = new ClassWriter(option)
 ```
 option可以是以下几个选项：
-option取值 | 含义
--|- 
-0 | 不自行自动计算，需要自己计算frames、local variables和operand stack size
-ClassWriter.COMPUTE_MAXS | 自动计算local variables和operand stack。此时依然需要调用visitMaxs，但是可以传任意参数，这些参数将会被忽略；需要自己计算frames。
-ClassWriter.COMPUTE_FRAMES | 自动计算上述几个选项，不用调用visitFrame，但是需要调用visitMaxs，参数将会被忽略。
+
+|option取值 | 含义|
+|------|-------|
+| 0 | 不自行自动计算，需要自己计算frames、local variables和operand stack size |
+|ClassWriter.COMPUTE_MAXS | 自动计算local variables和operand stack。此时依然需要调用visitMaxs，但是可以传任意参数，这些参数将会被忽略；需要自己计算frames。|
+|ClassWriter.COMPUTE_FRAMES | 自动计算上述几个选项，不用调用visitFrame，但是需要调用visitMaxs，参数将会被忽略。|
 
 ```
 public class Bean {
